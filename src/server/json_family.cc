@@ -644,13 +644,15 @@ OpResult<bool> SetPartialJson(const OpArgs& op_args, string_view key,
 
 size_t NormalizeNegativeIndex(int index, size_t size) {
   if (index >= 0) {
-    return index;
+    return static_cast<size_t>(index);
   }
-
-  if (static_cast<size_t>(-index) > size) {
+  
+  size_t abs_index = static_cast<size_t>(-static_cast<int64_t>(index));
+  if (abs_index > size) {
     return 0;
   }
-  return size + index;
+  
+  return size - abs_index;
 }
 
 auto GetJsonArrayIterator(JsonType* val, size_t index) {
