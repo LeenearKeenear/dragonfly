@@ -1108,6 +1108,7 @@ struct DoubleArithmeticCallbackResult {
   bool legacy_mode_is_enabled;
 };
 
+
 OpResult<string> OpDoubleArithmetic(const OpArgs& op_args, string_view key,
                                     const WrappedJsonPath& json_path, string_view num,
                                     ArithmeticOpType op_type) {
@@ -1119,6 +1120,12 @@ OpResult<string> OpDoubleArithmetic(const OpArgs& op_args, string_view key,
     return OpStatus::WRONG_TYPE;
   }
 
+  auto it_res = op_args.GetDbSlice().FindMutable(op_args.db_cntx, key, OBJ_JSON);
+  RETURN_ON_BAD_STATUS(it_res);
+
+  JsonAutoUpdater updater(op_args, key, *std::move(it_res));
+
+  JsonType backup_json = *updater.GetJson();
   bool is_result_overflow = false;
 
   DoubleArithmeticCallbackResult result{json_path.IsLegacyModePath()};
@@ -1137,11 +1144,16 @@ OpResult<string> OpDoubleArithmetic(const OpArgs& op_args, string_view key,
     return {};
   };
 
-  auto res = JsonMutateOperation<Nothing>(op_args, key, json_path, std::move(cb));
+  auto res = json_path.ExecuteMutateCallback<Nothing>(
+      updater.GetJson(), cb, CallbackResultOptions::DefaultMutateOptions());
 
-  if (is_result_overflow)
+  if (is_result_overflow) {
+    *updater.GetJson() = std::move(backup_json);
+    updater.SetJsonSize();
     return OpStatus::INVALID_NUMERIC_RESULT;
+  }
 
+  updater.SetJsonSize();
   RETURN_ON_BAD_STATUS(res);
 
   if (!result.json_value) {
